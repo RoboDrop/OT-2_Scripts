@@ -1,0 +1,15 @@
+Robot: f21566 (10.6.41.221)
+Downloaded from endpoint: /calibration/pipette_offset
+
+Current attached pipettes (/instruments):
+- left:  P3HSV1318091033
+- right: P3HSV1318071217
+
+Downloaded files in this directory:
+- P3HSV1318091033.json  -> response for current left serial (no calibration record returned)
+- P3HSV1318071217.json  -> response for current right serial (contains calibration record)
+- pipette_offsets_all.json -> all saved pipette offset records on robot
+
+Note:
+A left-mount calibration exists for serial P3HSV1318091807 (from pipette_offsets_all.json),
+which does not match the currently attached left pipette serial P3HSV1318091033.
