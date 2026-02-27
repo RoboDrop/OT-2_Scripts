@@ -10,11 +10,12 @@ set -euo pipefail
 #   ./run_ot2_pipette_smoke_test.sh --mount right --host f21566.local
 
 MOUNT_SELECTION="both"
-ROBOT_HOST="${OT2_HOST:-opentrons.local}"
+ROBOT_HOST="${OT2_HOST:-}"
 PYTHON_BIN="${PYTHON_BIN:-}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LOCAL_SCRIPT_PATH="${SCRIPT_DIR}/ot2_pipette_smoke_test.py"
+HOST_RESOLVER="${SCRIPT_DIR}/ot2_resolve_host.py"
 
 timestamp() {
   date +"%Y-%m-%dT%H:%M:%S%z"
@@ -120,12 +121,23 @@ validate_mount_selection() {
   esac
 }
 
+resolve_robot_host() {
+  [[ -f "${HOST_RESOLVER}" ]] || fail "Host resolver not found: ${HOST_RESOLVER}"
+  if [[ -n "${ROBOT_HOST}" ]]; then
+    ROBOT_HOST="$(python3 "${HOST_RESOLVER}" --host "${ROBOT_HOST}")"
+    return
+  fi
+  ROBOT_HOST="$(python3 "${HOST_RESOLVER}")"
+}
+
 main() {
   parse_args "$@"
   validate_mount_selection
 
   [[ -f "${LOCAL_SCRIPT_PATH}" ]] || fail "Smoke test script not found: ${LOCAL_SCRIPT_PATH}"
+  require_command python3
   resolve_python_bin
+  resolve_robot_host
 
   log_info "Starting OT-2 smoke test over robot-server API."
   log_info "Selected start mount: ${MOUNT_SELECTION}"

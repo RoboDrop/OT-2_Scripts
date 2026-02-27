@@ -1,0 +1,22 @@
+{
+  "data": [
+    {
+      "mount": "left",
+      "instrumentType": "pipette",
+      "instrumentModel": "p1000_single_v2.2",
+      "serialNumber": "P1KSV222022033004",
+      "subsystem": "pipette_left",
+      "ok": true,
+      "data": {
+        "channels": 1,
+        "min_volume": 100.0,
+        "max_volume": 1000.0
+      },
+      "instrumentName": "p1000_single_gen2"
+    }
+  ],
+  "meta": {
+    "cursor": 0,
+    "totalLength": 1
+  }
+}

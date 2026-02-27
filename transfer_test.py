@@ -19,7 +19,7 @@ def run(protocol: protocol_api.ProtocolContext):
 
     # Instruments
     left_p300 = protocol.load_instrument("p300_single", mount="left")
-    right_p300 = protocol.load_instrument("p300_single", mount="right")
+    # right_p300 = protocol.load_instrument("p300_single", mount="right")
 
     source = plate["A1"]
     dest = plate["H12"]
@@ -33,8 +33,8 @@ def run(protocol: protocol_api.ProtocolContext):
     left_p300.drop_tip()
 
     # Right pipette transfer
-    right_p300.pick_up_tip(tiprack_300["A2"])
-    right_p300.aspirate(vol, source.bottom(1))
-    right_p300.dispense(vol, dest.bottom(1))
-    right_p300.blow_out(dest.top())
-    right_p300.drop_tip()
+    # right_p300.pick_up_tip(tiprack_300["A2"])
+    # right_p300.aspirate(vol, source.bottom(1))
+    # right_p300.dispense(vol, dest.bottom(1))
+    # right_p300.blow_out(dest.top())
+    # right_p300.drop_tip()

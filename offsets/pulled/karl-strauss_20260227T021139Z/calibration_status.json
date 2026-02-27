@@ -1,0 +1,60 @@
+{
+  "deckCalibration": {
+    "status": "OK",
+    "data": {
+      "type": "attitude",
+      "matrix": [
+        [
+          1.0005,
+          -0.0004,
+          0.0
+        ],
+        [
+          0.0035,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "lastModified": "2026-02-27T00:55:40.212993Z",
+      "pipetteCalibratedWith": "P3HSV1318091033",
+      "tiprack": "ed323db6ca1ddf197aeb20667c1a7a91c89cfb2f931f45079d483928da056812",
+      "source": "user",
+      "status": {
+        "markedBad": false,
+        "source": null,
+        "markedAt": null
+      }
+    }
+  },
+  "instrumentCalibration": {
+    "right": {
+      "single": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "multi": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "left": {
+      "single": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "multi": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    }
+  }
+}

@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 import sys
 import time
 from dataclasses import dataclass
@@ -56,6 +57,34 @@ TRASH_NAMESPACE = "opentrons"
 TRASH_VERSION = 1
 TRASH_WELL = "A1"
 DEFINITIONS_DIR = Path(__file__).resolve().parent / "definitions"
+HOST_RESOLVER = Path(__file__).resolve().parent / "ot2_resolve_host.py"
+
+
+def _resolve_host() -> str:
+    explicit = os.getenv(HOST_ENV_KEY, "").strip()
+    if explicit:
+        return explicit
+    if not HOST_RESOLVER.is_file():
+        return DEFAULT_HOST
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(HOST_RESOLVER),
+            "--port",
+            str(API_PORT),
+            "--api-version",
+            str(API_VERSION),
+        ],
+        check=False,
+        text=True,
+        capture_output=True,
+    )
+    if proc.returncode == 0:
+        resolved = (proc.stdout or "").strip()
+        if resolved:
+            return resolved
+    detail = (proc.stderr or proc.stdout or "").strip() or f"exit code {proc.returncode}"
+    raise RuntimeError(f"Failed to auto-resolve OT-2 host. Set {HOST_ENV_KEY} or pass --host via wrapper.\n{detail}")
 
 
 def _log_stderr(level: str, message: str) -> None:
@@ -716,7 +745,7 @@ def _exercise_mount(
 def _run_impl() -> None:
     _input_required()
     selected_mounts = _selected_mounts()
-    host = os.getenv(HOST_ENV_KEY, DEFAULT_HOST).strip() or DEFAULT_HOST
+    host = _resolve_host()
     _log_stderr("INFO", f"Requested mount selection: {','.join(selected_mounts)}")
     _log_stderr("INFO", f"Using OT-2 robot-server host: {host}:{API_PORT}")
 

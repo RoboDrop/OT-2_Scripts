@@ -1,0 +1,43 @@
+{
+  "data": [
+    {
+      "id": "P1KSV222022033004&left",
+      "pipette": "P1KSV222022033004",
+      "mount": "left",
+      "offset": [
+        -0.7000000000000117,
+        1.5999999999999943,
+        -2.799999999999997
+      ],
+      "tiprack": "f979b7278ee3e6c4a13a6336cc6a602688f916ab2962de49263a1af5b513a533",
+      "tiprackUri": "opentrons/opentrons_96_tiprack_1000ul/1",
+      "lastModified": "2026-02-27T02:10:52.134233Z",
+      "source": "user",
+      "status": {
+        "markedBad": false,
+        "source": null,
+        "markedAt": null
+      }
+    },
+    {
+      "id": "P3HSV1318091033&left",
+      "pipette": "P3HSV1318091033",
+      "mount": "left",
+      "offset": [
+        -0.9000000000000146,
+        -0.1999999999999993,
+        0.5000000000000071
+      ],
+      "tiprack": "ed323db6ca1ddf197aeb20667c1a7a91c89cfb2f931f45079d483928da056812",
+      "tiprackUri": "opentrons/opentrons_96_tiprack_300ul/1",
+      "lastModified": "2026-02-27T01:02:36.292859Z",
+      "source": "user",
+      "status": {
+        "markedBad": false,
+        "source": null,
+        "markedAt": null
+      }
+    }
+  ],
+  "links": null
+}

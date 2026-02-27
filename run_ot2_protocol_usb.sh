@@ -14,6 +14,8 @@ TIMEOUT_SECONDS=600
 POLL_SECONDS=2
 PORT=31950
 API_VERSION_HEADER="opentrons-version: 2"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+HOST_RESOLVER="${SCRIPT_DIR}/ot2_resolve_host.py"
 
 timestamp() {
   date +"%Y-%m-%dT%H:%M:%S%z"
@@ -120,67 +122,24 @@ validate_inputs() {
   [[ "$TIMEOUT_SECONDS" =~ ^[0-9]+$ ]] || fail "--timeout must be an integer"
 }
 
-probe_host() {
-  local host="$1"
-  local url="http://${host}:${PORT}/health"
-  curl -sS -m 2 -H "$API_VERSION_HEADER" "$url" >/dev/null 2>&1
-}
-
-discover_hosts() {
-  local -a candidates=()
-  local line host ip
-
-  candidates+=("opentrons.local")
-
-  while IFS= read -r line; do
-    host="$(printf "%s" "$line" | awk '{print $1}')"
-    ip="$(printf "%s" "$line" | awk '{print $2}' | tr -d '()')"
-
-    if [[ "$host" == *.local ]]; then
-      candidates+=("$host")
-    fi
-    if [[ "$ip" =~ ^169\.254\.[0-9]+\.[0-9]+$ ]]; then
-      candidates+=("$ip")
-    fi
-  done < <(arp -a 2>/dev/null || true)
-
-  printf "%s\n" "${candidates[@]}" | awk 'NF' | awk '!seen[$0]++'
-}
-
 resolve_robot_host() {
+  [[ -f "$HOST_RESOLVER" ]] || fail "Host resolver not found: $HOST_RESOLVER"
+
   if [[ -n "$ROBOT_HOST" ]]; then
     log_info "Using host from args/env: $ROBOT_HOST"
-    probe_host "$ROBOT_HOST" || fail "Unable to reach robot at $ROBOT_HOST:$PORT"
+    ROBOT_HOST="$(python3 "$HOST_RESOLVER" --host "$ROBOT_HOST" --port "$PORT" --api-version 2)"
     return
   fi
 
-  local -a found=()
-  local candidate
-  while IFS= read -r candidate; do
-    [[ -n "$candidate" ]] || continue
-    if probe_host "$candidate"; then
-      found+=("$candidate")
-    fi
-  done < <(discover_hosts)
-
-  if [[ ${#found[@]} -eq 0 ]]; then
-    fail "No reachable OT-2 robot found. Connect via USB and/or pass --host HOST."
-  fi
-
-  ROBOT_HOST="${found[0]}"
-  if [[ ${#found[@]} -gt 1 ]]; then
-    log_warn "Multiple reachable hosts found: ${found[*]}"
-    log_warn "Using first host: $ROBOT_HOST (pass --host to choose explicitly)."
-  else
-    log_info "Auto-discovered OT-2 host: $ROBOT_HOST"
-  fi
+  ROBOT_HOST="$(python3 "$HOST_RESOLVER" --port "$PORT" --api-version 2)"
+  log_info "Auto-discovered OT-2 host: $ROBOT_HOST"
 }
 
 main() {
   parse_args "$@"
   require_command curl
   require_command python3
-  require_command arp
+  [[ -f "$HOST_RESOLVER" ]] || fail "Host resolver not found: $HOST_RESOLVER"
   validate_inputs
   resolve_robot_host
 

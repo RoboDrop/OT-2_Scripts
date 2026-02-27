@@ -1,0 +1,24 @@
+{
+  "data": [
+    {
+      "id": "P3HSV1318091033&left",
+      "pipette": "P3HSV1318091033",
+      "mount": "left",
+      "offset": [
+        -0.9000000000000146,
+        -0.1999999999999993,
+        0.5000000000000071
+      ],
+      "tiprack": "ed323db6ca1ddf197aeb20667c1a7a91c89cfb2f931f45079d483928da056812",
+      "tiprackUri": "opentrons/opentrons_96_tiprack_300ul/1",
+      "lastModified": "2026-02-27T01:02:36.292859Z",
+      "source": "user",
+      "status": {
+        "markedBad": false,
+        "source": null,
+        "markedAt": null
+      }
+    }
+  ],
+  "links": null
+}

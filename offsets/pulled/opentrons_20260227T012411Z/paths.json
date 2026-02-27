@@ -1,0 +1,4 @@
+{
+  "robot_calibration_dir": "/root/.opentrons/robot",
+  "tip_length_calibration_dir": "/root/.opentrons/tip_lengths"
+}
