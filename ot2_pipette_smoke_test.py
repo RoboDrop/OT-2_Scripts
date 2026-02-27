@@ -5,7 +5,7 @@ Flow:
 1) Connect to one OT-2 robot-server host.
 2) Detect attached pipettes.
 3) Home robot.
-4) For each selected mount: move to slot 5, lower 3 inches, wait for manual tip confirm.
+4) For each attached mount: move to slot 5, lower 3 inches, wait for manual tip confirm.
 5) Register tip state and run aspirate/dispense cycles at 10% max volume until operator stops.
 6) Drop tip in trash labware.
 7) Test the other mount if attached.
@@ -29,7 +29,6 @@ from opentrons import types
 
 TEST_FRACTION = 0.10
 
-MOUNT_ENV_KEY = "OT2_SMOKE_TEST_MOUNT"
 HOST_ENV_KEY = "OT2_HOST"
 DEFAULT_HOST = "opentrons.local"
 
@@ -37,16 +36,23 @@ TARGET_SLOT = "5"
 TRASH_SLOT = "11"
 TIPRACK_SLOT = "5"
 TARGET_APPROACH_Z_MM = 120.0
-LOWER_DISTANCE_MM = 40.0  # 3 inches
+LOWER_DISTANCE_MM = 40.0
+MM_PER_INCH = 25.4
+MANUAL_TIP_HEIGHT_OFFSET_MM = 1.5 * MM_PER_INCH
+SIM_PICKUP_PRE_RAISE_MM = 2.0 * MM_PER_INCH
+MANUAL_TIP_LOWER_DISTANCE_MM = max(0.0, LOWER_DISTANCE_MM - MANUAL_TIP_HEIGHT_OFFSET_MM)
 API_PORT = 31950
 API_VERSION = "2"
 HTTP_TIMEOUT_SECONDS = 20.0
 COMMAND_TIMEOUT_SECONDS = 180.0
 POLL_INTERVAL_SECONDS = 0.20
 
-TIPRACK_LOAD_NAME = "opentrons_96_tiprack_300ul"
 TIPRACK_NAMESPACE = "opentrons"
 TIPRACK_VERSION = 1
+TIPRACK_SLOT_BY_MOUNT = {
+    "left": "5",
+    "right": "6",
+}
 TIP_WELL_BY_MOUNT = {
     "left": "A1",
     "right": "B1",
@@ -100,25 +106,8 @@ def _input_required() -> None:
         )
 
 
-def _selected_mounts() -> List[str]:
-    raw_value = os.getenv(MOUNT_ENV_KEY, "both").strip().lower()
-    if raw_value in ("", "both"):
-        return ["left", "right"]
-    if raw_value in ("left", "right"):
-        return [raw_value]
-    raise RuntimeError(
-        f"Invalid {MOUNT_ENV_KEY} value: {raw_value!r}. Use left, right, or both."
-    )
-
-
-def _ordered_mount_tests(selected_mounts: List[str], attached: Dict[str, "InstrumentInfo"]) -> List[str]:
-    if len(selected_mounts) == 1:
-        first = selected_mounts[0]
-        other = "right" if first == "left" else "left"
-        ordered = [first, other]
-    else:
-        ordered = ["left", "right"]
-    return [mount for mount in ordered if mount in attached]
+def _ordered_attached_mounts(attached: Dict[str, "InstrumentInfo"]) -> List[str]:
+    return [mount for mount in ("left", "right") if mount in attached]
 
 
 def _prompt_tip_confirmation(mount_name: str, pipette_name: str) -> bool:
@@ -428,6 +417,14 @@ def _volume_test_settings(max_volume: float) -> tuple[float, float, float]:
     return test_volume, aspirate_flow, dispense_flow
 
 
+def _tiprack_load_name_for_instrument(instrument: InstrumentInfo) -> str:
+    if instrument.max_volume <= 20:
+        return "opentrons_96_tiprack_20ul"
+    if instrument.max_volume <= 300:
+        return "opentrons_96_tiprack_300ul"
+    return "opentrons_96_tiprack_1000ul"
+
+
 def _ensure_labware(
     client: RobotServerClient,
     run_id: str,
@@ -504,6 +501,7 @@ def _move_to_slot_and_lower(
     run_id: str,
     pipette_id: str,
     mount_name: str,
+    lower_distance_mm: float = LOWER_DISTANCE_MM,
 ) -> None:
     _move_mount_to_slot(
         client=client,
@@ -515,7 +513,7 @@ def _move_to_slot_and_lower(
     )
     _log_stderr(
         "INFO",
-        f"Lowering {mount_name} mount by {LOWER_DISTANCE_MM:.1f} mm (3 inches).",
+        f"Lowering {mount_name} mount by {lower_distance_mm:.1f} mm.",
     )
     client.post_command(
         run_id,
@@ -523,7 +521,7 @@ def _move_to_slot_and_lower(
         {
             "pipetteId": pipette_id,
             "axis": "z",
-            "distance": -LOWER_DISTANCE_MM,
+            "distance": -lower_distance_mm,
         },
     )
 
@@ -537,6 +535,19 @@ def _register_tip_state(
     mount_name: str,
     pipette_name: str,
 ) -> None:
+    _log_stderr(
+        "INFO",
+        f"Raising {mount_name} mount by {SIM_PICKUP_PRE_RAISE_MM:.1f} mm before simulated pickUpTip.",
+    )
+    client.post_command(
+        run_id,
+        "moveRelative",
+        {
+            "pipetteId": pipette_id,
+            "axis": "z",
+            "distance": SIM_PICKUP_PRE_RAISE_MM,
+        },
+    )
     _log_stderr("INFO", f"Registering tip state via pickUpTip on virtual tiprack well {tip_well}.")
     try:
         client.post_command(
@@ -626,20 +637,24 @@ def _exercise_mount(
         run_id=run_id,
         pipette_id=pipette_id,
         mount_name=mount_name,
+        lower_distance_mm=MANUAL_TIP_LOWER_DISTANCE_MM,
     )
     if not _prompt_tip_confirmation(mount_name, pipette_name):
         _log_stderr("WARN", f"Skipping {pipette_name}@{mount_name} at operator request.")
         return
 
+    tiprack_load_name = _tiprack_load_name_for_instrument(instrument)
+    tiprack_slot = TIPRACK_SLOT_BY_MOUNT.get(mount_name, TIPRACK_SLOT)
+
     tiprack_id = _ensure_labware(
         client=client,
         run_id=run_id,
         cache=labware_cache,
-        cache_key="tiprack",
-        load_name=TIPRACK_LOAD_NAME,
+        cache_key=f"tiprack:{mount_name}:{tiprack_load_name}",
+        load_name=tiprack_load_name,
         namespace=TIPRACK_NAMESPACE,
         version=TIPRACK_VERSION,
-        slot_name=TIPRACK_SLOT,
+        slot_name=tiprack_slot,
     )
     trash_id = _ensure_labware(
         client=client,
@@ -744,9 +759,7 @@ def _exercise_mount(
 
 def _run_impl() -> None:
     _input_required()
-    selected_mounts = _selected_mounts()
     host = _resolve_host()
-    _log_stderr("INFO", f"Requested mount selection: {','.join(selected_mounts)}")
     _log_stderr("INFO", f"Using OT-2 robot-server host: {host}:{API_PORT}")
 
     client = RobotServerClient(host=host)
@@ -763,13 +776,15 @@ def _run_impl() -> None:
     if not attached:
         raise RuntimeError("No attached pipettes detected. Install a pipette and retry.")
 
-    mounts_to_test = _ordered_mount_tests(selected_mounts, attached)
+    _log_stderr(
+        "INFO",
+        "Detected attached pipettes: "
+        + ", ".join(f"{attached[m].name}@{m}" for m in _ordered_attached_mounts(attached)),
+    )
+
+    mounts_to_test = _ordered_attached_mounts(attached)
     if not mounts_to_test:
-        raise RuntimeError(
-            "No attached pipettes matched selected mount(s): "
-            + ", ".join(selected_mounts)
-            + "."
-        )
+        raise RuntimeError("No supported mounts detected (expected left and/or right).")
     _log_stderr(
         "INFO",
         "Testing pipettes: "
