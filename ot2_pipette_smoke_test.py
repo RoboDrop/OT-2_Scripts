@@ -5,8 +5,8 @@ Flow:
 1) Connect to one OT-2 robot-server host.
 2) Detect attached pipettes.
 3) Home robot.
-4) For each attached mount: move to slot 5, lower 3 inches, wait for manual tip confirm.
-5) Register tip state and run aspirate/dispense cycles at 10% max volume until operator stops.
+4) For each attached mount: move to slot 5, lower for manual tip add, wait for operator confirm.
+5) Register tip state and run transfer cycles (A1 -> D6 of slot-1 24-well plate) at 10% max volume until operator stops.
 6) Drop tip in trash labware.
 7) Test the other mount if attached.
 """
@@ -35,6 +35,10 @@ DEFAULT_HOST = "opentrons.local"
 TARGET_SLOT = "5"
 TRASH_SLOT = "11"
 TIPRACK_SLOT = "5"
+TRANSFER_PLATE_SLOT = "1"
+TRANSFER_SOURCE_WELL = "A1"
+TRANSFER_DEST_WELL = "D6"
+TRANSFER_WELL_Z_OFFSET_MM = 13.0
 TARGET_APPROACH_Z_MM = 120.0
 LOWER_DISTANCE_MM = 40.0
 MM_PER_INCH = 25.4
@@ -62,8 +66,16 @@ TRASH_LOAD_NAME = "opentrons_1_trash_1100ml_fixed"
 TRASH_NAMESPACE = "opentrons"
 TRASH_VERSION = 1
 TRASH_WELL = "A1"
+TRANSFER_PLATE_CANDIDATES = [
+    ("corning_24_wellplate_3.4ml_flat", "corning", 1),
+    ("corning_24_wellplate_3.4ml_flat", "opentrons", 1),
+    ("nest_24_wellplate_2ml_deep", "opentrons", 1),
+    ("nest_24_wellplate_2ml_deep", "nest", 1),
+    ("thermofisher_24_wellplate_1800ul", "opentrons", 1),
+]
 DEFINITIONS_DIR = Path(__file__).resolve().parent / "definitions"
 HOST_RESOLVER = Path(__file__).resolve().parent / "ot2_resolve_host.py"
+LabwareCandidate = tuple[str, str, int]
 
 
 def _resolve_host() -> str:
@@ -113,22 +125,22 @@ def _ordered_attached_mounts(attached: Dict[str, "InstrumentInfo"]) -> List[str]
 def _prompt_tip_confirmation(mount_name: str, pipette_name: str) -> bool:
     _input_required()
     prompt = (
-        f"{pipette_name}@{mount_name}: add a tip, then type 'r' to continue "
-        "(or 'k' to skip this mount): "
+        f"{pipette_name}@{mount_name}: add a tip, then press Enter to continue "
+        "(or type 'k' to skip this mount): "
     )
     while True:
         response = input(prompt).strip().lower()
-        if response == "r":
+        if response in ("", "r"):
             return True
         if response == "k":
             return False
-        print("Please type 'r' to continue or 'k' to skip.", file=sys.stderr, flush=True)
+        print("Press Enter to continue or type 'k' to skip.", file=sys.stderr, flush=True)
 
 
 def _prompt_continue_cycles() -> bool:
     _input_required()
     response = input(
-        "Press Enter for another aspirate/dispense cycle, or type 's' to move on: "
+        "Press Enter for another A1->D6 transfer cycle, or type 's' to move on: "
     ).strip().lower()
     return response != "s"
 
@@ -136,13 +148,13 @@ def _prompt_continue_cycles() -> bool:
 def _prompt_manual_tip_discard(mount_name: str, pipette_name: str) -> None:
     _input_required()
     prompt = (
-        f"{pipette_name}@{mount_name}: put tip in physical trash now, then type 'r' to continue: "
+        f"{pipette_name}@{mount_name}: put tip in physical trash now, then press Enter to continue: "
     )
     while True:
         response = input(prompt).strip().lower()
-        if response == "r":
+        if response in ("", "r"):
             return
-        print("Please type 'r' once the tip is in trash.", file=sys.stderr, flush=True)
+        print("Press Enter once the tip is in trash.", file=sys.stderr, flush=True)
 
 
 def _slot_center(slot_id: str) -> types.Point:
@@ -173,7 +185,6 @@ def _slot_center(slot_id: str) -> types.Point:
 
 @dataclass(frozen=True)
 class InstrumentInfo:
-    mount: str
     name: str
     max_volume: float
 
@@ -189,7 +200,6 @@ class CommandExecutionError(RuntimeError):
         self.command_type = command_type
         self.error_payload = error_payload
         self.error_type = str(error_payload.get("errorType", ""))
-        self.error_code = str(error_payload.get("errorCode", ""))
 
 
 class RobotServerClient:
@@ -406,7 +416,7 @@ def _attached_by_mount(instrument_rows: List[Dict[str, Any]]) -> Dict[str, Instr
             continue
         if max_volume <= 0:
             continue
-        attached[mount] = InstrumentInfo(mount=mount, name=name, max_volume=max_volume)
+        attached[mount] = InstrumentInfo(name=name, max_volume=max_volume)
     return attached
 
 
@@ -423,6 +433,67 @@ def _tiprack_load_name_for_instrument(instrument: InstrumentInfo) -> str:
     if instrument.max_volume <= 300:
         return "opentrons_96_tiprack_300ul"
     return "opentrons_96_tiprack_1000ul"
+
+
+def _transfer_well_location() -> Dict[str, Any]:
+    return {"origin": "bottom", "offset": {"x": -5.0, "y": 2.0, "z": TRANSFER_WELL_Z_OFFSET_MM}}
+
+
+def _load_transfer_plate(
+    client: RobotServerClient,
+    run_id: str,
+    labware_cache: Dict[str, str],
+    candidates: List[LabwareCandidate],
+) -> str:
+    for load_name, namespace, version in candidates:
+        try:
+            plate_id = _ensure_labware(
+                client=client,
+                run_id=run_id,
+                cache=labware_cache,
+                cache_key=f"transfer_plate:{load_name}:{namespace}:{version}:{TRANSFER_PLATE_SLOT}",
+                load_name=load_name,
+                namespace=namespace,
+                version=version,
+                slot_name=TRANSFER_PLATE_SLOT,
+            )
+            _log_stderr(
+                "INFO",
+                f"Using transfer plate {load_name} ({namespace}/{version}) in slot {TRANSFER_PLATE_SLOT}.",
+            )
+            return plate_id
+        except (ApiRequestError, CommandExecutionError) as exc:
+            _log_stderr(
+                "WARN",
+                f"Failed to load transfer plate candidate {load_name} ({namespace}/{version}): {exc}",
+            )
+    raise RuntimeError(
+        "Unable to load 24-well transfer plate in slot 1. "
+        "Update TRANSFER_PLATE_CANDIDATES in this script with the correct labware definition."
+    )
+
+
+def _aspirate_from_source(
+    client: RobotServerClient,
+    run_id: str,
+    pipette_id: str,
+    transfer_plate_id: str,
+    transfer_well_location: Dict[str, Any],
+    volume: float,
+    flow_rate: float,
+) -> None:
+    client.post_command(
+        run_id,
+        "aspirate",
+        {
+            "pipetteId": pipette_id,
+            "labwareId": transfer_plate_id,
+            "wellName": TRANSFER_SOURCE_WELL,
+            "wellLocation": transfer_well_location,
+            "volume": volume,
+            "flowRate": flow_rate,
+        },
+    )
 
 
 def _ensure_labware(
@@ -645,6 +716,7 @@ def _exercise_mount(
 
     tiprack_load_name = _tiprack_load_name_for_instrument(instrument)
     tiprack_slot = TIPRACK_SLOT_BY_MOUNT.get(mount_name, TIPRACK_SLOT)
+    transfer_well_location = _transfer_well_location()
 
     tiprack_id = _ensure_labware(
         client=client,
@@ -666,6 +738,12 @@ def _exercise_mount(
         version=TRASH_VERSION,
         slot_name=TRASH_SLOT,
     )
+    transfer_plate_id = _load_transfer_plate(
+        client=client,
+        run_id=run_id,
+        labware_cache=labware_cache,
+        candidates=TRANSFER_PLATE_CANDIDATES,
+    )
     tip_well = TIP_WELL_BY_MOUNT.get(mount_name, "A1")
 
     _register_tip_state(
@@ -678,16 +756,11 @@ def _exercise_mount(
         pipette_name=pipette_name,
     )
 
-    _move_to_slot_and_lower(
-        client=client,
-        run_id=run_id,
-        pipette_id=pipette_id,
-        mount_name=mount_name,
-    )
-
     _log_stderr(
         "INFO",
-        f"Starting cycle loop for {pipette_name}@{mount_name}: "
+        f"Starting transfer cycle loop for {pipette_name}@{mount_name}: "
+        f"{TRANSFER_SOURCE_WELL}->{TRANSFER_DEST_WELL} in slot {TRANSFER_PLATE_SLOT}, "
+        f"well z offset {transfer_well_location['offset']['z']:.1f} mm from bottom, "
         f"{test_volume} uL (10% of {instrument.max_volume} uL), "
         f"aspirate flow {aspirate_flow} uL/s, dispense flow {dispense_flow} uL/s.",
     )
@@ -695,16 +768,19 @@ def _exercise_mount(
     cycle = 1
     while True:
         client.post_command(run_id, "prepareToAspirate", {"pipetteId": pipette_id})
-        _log_stderr("INFO", f"{pipette_name}@{mount_name} cycle {cycle}: aspirate")
+        _log_stderr(
+            "INFO",
+            f"{pipette_name}@{mount_name} cycle {cycle}: aspirate {test_volume} uL from {TRANSFER_SOURCE_WELL}",
+        )
         try:
-            client.post_command(
-                run_id,
-                "aspirateInPlace",
-                {
-                    "pipetteId": pipette_id,
-                    "volume": test_volume,
-                    "flowRate": aspirate_flow,
-                },
+            _aspirate_from_source(
+                client=client,
+                run_id=run_id,
+                pipette_id=pipette_id,
+                transfer_plate_id=transfer_plate_id,
+                transfer_well_location=transfer_well_location,
+                volume=test_volume,
+                flow_rate=aspirate_flow,
             )
         except CommandExecutionError as exc:
             if exc.error_type == "TipNotAttachedError":
@@ -718,23 +794,29 @@ def _exercise_mount(
                     mount_name=mount_name,
                     pipette_name=pipette_name,
                 )
-                client.post_command(
-                    run_id,
-                    "aspirateInPlace",
-                    {
-                        "pipetteId": pipette_id,
-                        "volume": test_volume,
-                        "flowRate": aspirate_flow,
-                    },
+                _aspirate_from_source(
+                    client=client,
+                    run_id=run_id,
+                    pipette_id=pipette_id,
+                    transfer_plate_id=transfer_plate_id,
+                    transfer_well_location=transfer_well_location,
+                    volume=test_volume,
+                    flow_rate=aspirate_flow,
                 )
             else:
                 raise
-        _log_stderr("INFO", f"{pipette_name}@{mount_name} cycle {cycle}: dispense")
+        _log_stderr(
+            "INFO",
+            f"{pipette_name}@{mount_name} cycle {cycle}: dispense {test_volume} uL to {TRANSFER_DEST_WELL}",
+        )
         client.post_command(
             run_id,
-            "dispenseInPlace",
+            "dispense",
             {
                 "pipetteId": pipette_id,
+                "labwareId": transfer_plate_id,
+                "wellName": TRANSFER_DEST_WELL,
+                "wellLocation": transfer_well_location,
                 "volume": test_volume,
                 "flowRate": dispense_flow,
                 "pushOut": 0.0,
@@ -776,15 +858,14 @@ def _run_impl() -> None:
     if not attached:
         raise RuntimeError("No attached pipettes detected. Install a pipette and retry.")
 
-    _log_stderr(
-        "INFO",
-        "Detected attached pipettes: "
-        + ", ".join(f"{attached[m].name}@{m}" for m in _ordered_attached_mounts(attached)),
-    )
-
     mounts_to_test = _ordered_attached_mounts(attached)
     if not mounts_to_test:
         raise RuntimeError("No supported mounts detected (expected left and/or right).")
+    _log_stderr(
+        "INFO",
+        "Detected attached pipettes: "
+        + ", ".join(f"{attached[m].name}@{m}" for m in mounts_to_test),
+    )
     _log_stderr(
         "INFO",
         "Testing pipettes: "
