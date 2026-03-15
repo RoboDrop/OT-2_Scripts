@@ -29,10 +29,10 @@
       "uri": "opentrons/opentrons_96_tiprack_1000ul/1"
     },
     {
-      "id": "60e107ba7e6e5d23beefe9f0c888f860f7b923c71906aaa5e7f460ab25c4f38a&P20SV202019072549",
+      "id": "60e107ba7e6e5d23beefe9f0c888f860f7b923c71906aaa5e7f460ab25c4f38a&P20SV212020050806",
       "tipLength": 30.75000000000003,
       "tiprack": "60e107ba7e6e5d23beefe9f0c888f860f7b923c71906aaa5e7f460ab25c4f38a",
-      "pipette": "P20SV202019072549",
+      "pipette": "P20SV212020050806",
       "lastModified": "2026-03-14T21:39:06.714825Z",
       "source": "user",
       "status": {
@@ -43,10 +43,10 @@
       "uri": "opentrons/opentrons_96_tiprack_20ul/1"
     },
     {
-      "id": "1963593becc23dedc19b6ae645fcbacf6520d8c1ba4e844ba7fa776b49f48ecc&P20SV202019072549",
+      "id": "1963593becc23dedc19b6ae645fcbacf6520d8c1ba4e844ba7fa776b49f48ecc&P20SV212020050806",
       "tipLength": 30.75000000000007,
       "tiprack": "1963593becc23dedc19b6ae645fcbacf6520d8c1ba4e844ba7fa776b49f48ecc",
-      "pipette": "P20SV202019072549",
+      "pipette": "P20SV212020050806",
       "lastModified": "2026-03-14T21:57:17.286667Z",
       "source": "user",
       "status": {
@@ -62,6 +62,20 @@
       "tiprack": "ed323db6ca1ddf197aeb20667c1a7a91c89cfb2f931f45079d483928da056812",
       "pipette": "P3HSV1318091033",
       "lastModified": "2026-02-26T01:07:22.302080Z",
+      "source": "user",
+      "status": {
+        "markedBad": false,
+        "source": null,
+        "markedAt": null
+      },
+      "uri": "opentrons/opentrons_96_tiprack_300ul/1"
+    },
+    {
+      "id": "ed323db6ca1ddf197aeb20667c1a7a91c89cfb2f931f45079d483928da056812&P20SV202019072549",
+      "tipLength": 52.03000000000004,
+      "tiprack": "ed323db6ca1ddf197aeb20667c1a7a91c89cfb2f931f45079d483928da056812",
+      "pipette": "P20SV202019072549",
+      "lastModified": "2026-03-14T23:42:48.224755Z",
       "source": "user",
       "status": {
         "markedBad": false,

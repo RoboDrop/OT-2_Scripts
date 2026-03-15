@@ -1,0 +1,22 @@
+{
+  "data": [
+    {
+      "mount": "left",
+      "instrumentType": "pipette",
+      "instrumentModel": "p20_single_v2.1",
+      "serialNumber": "P20SV212020050806",
+      "subsystem": "pipette_left",
+      "ok": true,
+      "data": {
+        "channels": 1,
+        "min_volume": 1.0,
+        "max_volume": 20.0
+      },
+      "instrumentName": "p20_single_gen2"
+    }
+  ],
+  "meta": {
+    "cursor": 0,
+    "totalLength": 1
+  }
+}

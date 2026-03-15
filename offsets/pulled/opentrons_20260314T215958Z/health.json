@@ -1,0 +1,33 @@
+{
+  "name": "opentrons",
+  "robot_model": "OT-2 Standard",
+  "api_version": "8.8.1",
+  "fw_version": "v1.1.0-25e5cea",
+  "board_revision": "A",
+  "logs": [
+    "/logs/serial.log",
+    "/logs/api.log",
+    "/logs/server.log",
+    "/logs/update_server.log"
+  ],
+  "system_version": "v1.19.6",
+  "maximum_protocol_api_version": [
+    2,
+    27
+  ],
+  "minimum_protocol_api_version": [
+    2,
+    0
+  ],
+  "disk_details": {
+    "systemAvailableMb": 451.6953125,
+    "imagesDirectorySizeMb": 0.0
+  },
+  "links": {
+    "apiLog": "/logs/api.log",
+    "serialLog": "/logs/serial.log",
+    "serverLog": "/logs/server.log",
+    "apiSpec": "/openapi.json",
+    "systemTime": "/system/time"
+  }
+}
