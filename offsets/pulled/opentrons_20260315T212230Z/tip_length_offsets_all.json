@@ -1,0 +1,19 @@
+{
+  "data": [
+    {
+      "id": "60e107ba7e6e5d23beefe9f0c888f860f7b923c71906aaa5e7f460ab25c4f38a&P20SV202019102106",
+      "tipLength": 30.75000000000003,
+      "tiprack": "60e107ba7e6e5d23beefe9f0c888f860f7b923c71906aaa5e7f460ab25c4f38a",
+      "pipette": "P20SV202019102106",
+      "lastModified": "2026-03-15T21:21:43.401526Z",
+      "source": "user",
+      "status": {
+        "markedBad": false,
+        "source": null,
+        "markedAt": null
+      },
+      "uri": "opentrons/opentrons_96_tiprack_20ul/1"
+    }
+  ],
+  "links": null
+}

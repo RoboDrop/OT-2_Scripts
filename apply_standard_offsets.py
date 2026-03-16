@@ -17,6 +17,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -180,38 +181,222 @@ def _ssh_preflight(args: argparse.Namespace) -> None:
     )
 
 
-def _attached_pipette_serials(host: str, api_port: int, api_version: str) -> Dict[str, str]:
+def _attached_pipettes(host: str, api_port: int, api_version: str) -> Dict[str, Dict[str, str]]:
     url = f"http://{host}:{api_port}/instruments"
     payload = _http_json(url, api_version)
-    out: Dict[str, str] = {}
+    out: Dict[str, Dict[str, str]] = {}
     for item in payload.get("data", []):
         if item.get("instrumentType") != "pipette":
             continue
         mount = str(item.get("mount", "")).lower()
         serial = str(item.get("serialNumber", "")).strip()
+        name = str(item.get("instrumentName", "")).strip()
         if mount in ("left", "right") and serial:
-            out[mount] = serial
+            out[mount] = {"serial": serial, "name": name}
     return out
 
 
-def _find_template_by_mount(pipette_offsets: Dict[str, Any], mount: str) -> Dict[str, Any]:
+_PIPETTE_SERIAL_RE = re.compile(r"\bP[0-9A-Z]{8,}\b")
+
+
+def _preferred_ambiguous_serial(left_serial: str | None, right_serial: str | None) -> str | None:
+    # User preference: if ambiguous and both are attached, pick left.
+    return left_serial or right_serial
+
+
+def _collect_serial_mounts_from_pipette_template(pipette_offsets: Dict[str, Any]) -> Dict[str, str]:
+    out: Dict[str, str] = {}
+    for entry in pipette_offsets.get("data", []):
+        if not isinstance(entry, dict):
+            continue
+        mount = str(entry.get("mount", "")).strip().lower()
+        serial = str(entry.get("pipette", "")).strip()
+        if mount in ("left", "right") and _PIPETTE_SERIAL_RE.fullmatch(serial):
+            out[serial] = mount
+    return out
+
+
+def _serial_replacement_map(
+    serial_mounts: Dict[str, str], left_serial: str | None, right_serial: str | None
+) -> Dict[str, str]:
+    out: Dict[str, str] = {}
+    ambiguous_serial = _preferred_ambiguous_serial(left_serial, right_serial)
+    for serial, mount in serial_mounts.items():
+        if mount == "left" and left_serial:
+            out[serial] = left_serial
+        elif mount == "right" and right_serial:
+            out[serial] = right_serial
+        elif ambiguous_serial:
+            out[serial] = ambiguous_serial
+    return out
+
+
+def _replace_serials_in_template(
+    value: Any,
+    serial_map: Dict[str, str],
+    left_serial: str | None,
+    right_serial: str | None,
+    current_mount: str | None = None,
+) -> Any:
+    ambiguous_serial = _preferred_ambiguous_serial(left_serial, right_serial)
+
+    if isinstance(value, dict):
+        mount_raw = value.get("mount")
+        next_mount = current_mount
+        if isinstance(mount_raw, str):
+            mount = mount_raw.strip().lower()
+            if mount in ("left", "right"):
+                next_mount = mount
+
+        out: Dict[str, Any] = {}
+        for k, v in value.items():
+            replaced = _replace_serials_in_template(
+                v,
+                serial_map=serial_map,
+                left_serial=left_serial,
+                right_serial=right_serial,
+                current_mount=next_mount,
+            )
+            if k in ("pipette", "pipetteCalibratedWith", "pipette_calibrated_with", "serialNumber"):
+                if isinstance(replaced, str) and _PIPETTE_SERIAL_RE.fullmatch(replaced):
+                    if next_mount == "left" and left_serial:
+                        replaced = left_serial
+                    elif next_mount == "right" and right_serial:
+                        replaced = right_serial
+                    else:
+                        replaced = serial_map.get(replaced, ambiguous_serial or replaced)
+            out[k] = replaced
+        return out
+
+    if isinstance(value, list):
+        return [
+            _replace_serials_in_template(
+                item,
+                serial_map=serial_map,
+                left_serial=left_serial,
+                right_serial=right_serial,
+                current_mount=current_mount,
+            )
+            for item in value
+        ]
+
+    if isinstance(value, str):
+        if not _PIPETTE_SERIAL_RE.search(value):
+            return value
+
+        def repl(match: re.Match[str]) -> str:
+            serial = match.group(0)
+            if current_mount == "left" and left_serial:
+                return left_serial
+            if current_mount == "right" and right_serial:
+                return right_serial
+            return serial_map.get(serial, ambiguous_serial or serial)
+
+        return _PIPETTE_SERIAL_RE.sub(repl, value)
+
+    return value
+
+
+def _pipette_volume_from_name(pipette_name: str) -> str | None:
+    m = re.search(r"p(\d+)", pipette_name.strip().lower())
+    if not m:
+        return None
+    return m.group(1)
+
+
+def _find_template_by_mount(
+    pipette_offsets: Dict[str, Any], mount: str, pipette_name: str | None = None
+) -> Dict[str, Any]:
+    candidates: List[Dict[str, Any]] = []
     for entry in pipette_offsets.get("data", []):
         if str(entry.get("mount", "")).lower() == mount:
+            candidates.append(entry)
+    if not candidates:
+        raise RuntimeError(f"No pipette offset template found for mount={mount!r}.")
+
+    # Prefer a tiprack URI that matches the attached pipette volume family
+    # (e.g. p20 -> tiprack_20ul) when multiple templates exist for one mount.
+    if pipette_name:
+        vol = _pipette_volume_from_name(pipette_name)
+        if vol:
+            needle = f"{vol}ul"
+            for entry in candidates:
+                uri = str(entry.get("tiprackUri", entry.get("uri", ""))).lower()
+                if needle in uri:
+                    return entry
+
+    if len(candidates) == 1:
+        return candidates[0]
+    for entry in candidates:
+        serial = str(entry.get("pipette", "")).strip()
+        if _PIPETTE_SERIAL_RE.fullmatch(serial):
             return entry
-    raise RuntimeError(f"No pipette offset template found for mount={mount!r}.")
+    return candidates[0]
 
 
-def _find_tip_template_for_pipette(
-    tip_lengths: Dict[str, Any], preferred_serial: str | None
-) -> Dict[str, Any]:
-    if preferred_serial:
-        for entry in tip_lengths.get("data", []):
-            if str(entry.get("pipette", "")).strip() == preferred_serial:
-                return entry
-    data = tip_lengths.get("data", [])
+def _find_tip_templates_for_pipette(
+    tip_lengths: Dict[str, Any],
+    preferred_serial: str | None,
+    preferred_tiprack: str | None = None,
+    pipette_name: str | None = None,
+) -> List[Dict[str, Any]]:
+    data = [entry for entry in tip_lengths.get("data", []) if isinstance(entry, dict)]
     if not data:
         raise RuntimeError("No tip length templates found.")
-    return data[0]
+
+    def has_volume(entry: Dict[str, Any]) -> bool:
+        if not pipette_name:
+            return False
+        vol = _pipette_volume_from_name(pipette_name)
+        if not vol:
+            return False
+        uri = str(entry.get("uri", "")).lower()
+        return f"{vol}ul" in uri
+
+    def _sort_key(entry: Dict[str, Any]) -> tuple[int, int, str]:
+        serial = str(entry.get("pipette", "")).strip()
+        tiprack = str(entry.get("tiprack", "")).strip()
+        last_modified = str(entry.get("lastModified", ""))
+        return (
+            0 if preferred_serial and serial == preferred_serial else 1,
+            0 if preferred_tiprack and tiprack == preferred_tiprack else 1,
+            last_modified,
+        )
+
+    by_volume = [e for e in data if has_volume(e)]
+    if by_volume:
+        # Keep all URIs for the current pipette size (e.g. 20ul + filter 20ul),
+        # choosing one best template per URI.
+        by_uri: Dict[str, Dict[str, Any]] = {}
+        for entry in sorted(by_volume, key=_sort_key):
+            uri = str(entry.get("uri", "")).strip()
+            if not uri or uri in by_uri:
+                continue
+            by_uri[uri] = entry
+        if by_uri:
+            return list(by_uri.values())
+
+    if preferred_serial and preferred_tiprack:
+        exact = [
+            e
+            for e in data
+            if str(e.get("pipette", "")).strip() == preferred_serial
+            and str(e.get("tiprack", "")).strip() == preferred_tiprack
+        ]
+        if exact:
+            return [exact[0]]
+
+    if preferred_serial:
+        serial_entries = [e for e in data if str(e.get("pipette", "")).strip() == preferred_serial]
+        if serial_entries:
+            return [sorted(serial_entries, key=_sort_key)[0]]
+
+    if preferred_tiprack:
+        by_tiprack = [e for e in data if str(e.get("tiprack", "")).strip() == preferred_tiprack]
+        if by_tiprack:
+            return [sorted(by_tiprack, key=_sort_key)[0]]
+
+    return [sorted(data, key=_sort_key)[0]]
 
 
 def _build_pipette_file(template: Dict[str, Any]) -> Dict[str, Any]:
@@ -225,17 +410,22 @@ def _build_pipette_file(template: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def _build_tip_length_file(template: Dict[str, Any]) -> Dict[str, Any]:
-    uri = template["uri"]
-    return {
-        uri: {
+def _build_tip_length_file(templates: List[Dict[str, Any]]) -> Dict[str, Any]:
+    out: Dict[str, Any] = {}
+    for template in templates:
+        uri = str(template.get("uri", "")).strip()
+        if not uri:
+            continue
+        out[uri] = {
             "tipLength": template["tipLength"],
             "lastModified": _utc_now(),
             "source": template.get("source", "user"),
             "status": template.get("status", {"markedBad": False, "source": None, "markedAt": None}),
             "definitionHash": template["tiprack"],
         }
-    }
+    if not out:
+        raise RuntimeError("No valid tip length templates found (missing uri).")
+    return out
 
 
 def _build_deck_file(deck_source: Dict[str, Any], default_pipette: str) -> Dict[str, Any]:
@@ -255,12 +445,17 @@ def _build_deck_file(deck_source: Dict[str, Any], default_pipette: str) -> Dict[
         "attitude": attitude,
         "last_modified": _utc_now(),
         "source": deck.get("source", "user"),
-        "pipette_calibrated_with": deck.get(
-            "pipette_calibrated_with", deck.get("pipetteCalibratedWith", default_pipette)
-        ),
+        "pipette_calibrated_with": default_pipette
+        if default_pipette
+        else deck.get("pipette_calibrated_with", deck.get("pipetteCalibratedWith", "")),
         "tiprack": deck.get("tiprack"),
         "status": deck.get("status", {"markedBad": False, "source": None, "markedAt": None}),
     }
+
+
+def sh_quote(value: str) -> str:
+    # Minimal POSIX shell quoting for remote command assembly.
+    return "'" + value.replace("'", "'\"'\"'") + "'"
 
 
 def _remote_apply(
@@ -384,12 +579,7 @@ def main() -> None:
     parser.add_argument(
         "--restart-robot-server",
         action="store_true",
-        help="Restart opentrons-robot-server after writing calibration files (helps deck calibration take effect).",
-    )
-    parser.add_argument(
-        "--no-restart-robot-server",
-        action="store_true",
-        help="Do not restart opentrons-robot-server after applying files.",
+        help="Restart opentrons-robot-server after writing calibration files (default: no restart).",
     )
     parser.add_argument(
         "--restart-wait-seconds",
@@ -418,13 +608,6 @@ def main() -> None:
         help="Template file from /calibration/status (or deck_offset.json)",
     )
     args = parser.parse_args()
-
-    # Default to restarting robot-server unless explicitly disabled. Deck calibration is
-    # often loaded on startup, so restart is needed for it to take effect.
-    if args.no_restart_robot_server:
-        args.restart_robot_server = False
-    else:
-        args.restart_robot_server = True
 
     offsets_dir = Path(args.offsets_dir).expanduser().resolve()
     pipette_template_path = Path(args.pipette_offsets_template).expanduser()
@@ -543,15 +726,40 @@ def main() -> None:
     if not args.dry_run:
         _ssh_preflight(args)
 
-    mounts = _attached_pipette_serials(args.host, args.api_port, args.api_version)
-    left_serial = mounts.get("left")
-    right_serial = mounts.get("right")
+    attached = _attached_pipettes(args.host, args.api_port, args.api_version)
+    left_serial = attached.get("left", {}).get("serial")
+    right_serial = attached.get("right", {}).get("serial")
+    left_name = attached.get("left", {}).get("name")
+    right_name = attached.get("right", {}).get("name")
     if not left_serial and not right_serial:
         raise RuntimeError("No attached left/right pipettes were found via /instruments.")
 
     pipette_tpl = _load_json(pipette_template_path)
     tip_tpl = _load_json(tip_template_path)
     deck_tpl = _load_json(deck_template_path)
+
+    serial_mounts = _collect_serial_mounts_from_pipette_template(pipette_tpl)
+    serial_map = _serial_replacement_map(
+        serial_mounts=serial_mounts,
+        left_serial=left_serial,
+        right_serial=right_serial,
+    )
+
+    # Normalize template serial references for currently attached mounts.
+    pipette_tpl = _replace_serials_in_template(
+        pipette_tpl,
+        serial_map=serial_map,
+        left_serial=left_serial,
+        right_serial=right_serial,
+    )
+    # Keep tip-length templates as-is to avoid cross-size remapping (e.g. p20 run
+    # accidentally mutating p300/p1000 entries to the current serial).
+    deck_tpl = _replace_serials_in_template(
+        deck_tpl,
+        serial_map=serial_map,
+        left_serial=left_serial,
+        right_serial=right_serial,
+    )
 
     print("Detected pipettes:")
     print(f"  left:  {left_serial or '<none>'}")
@@ -562,24 +770,34 @@ def main() -> None:
         left_p_file = right_p_file = left_t_file = right_t_file = None
 
         if left_serial:
-            lp = _find_template_by_mount(pipette_tpl, "left")
+            lp = _find_template_by_mount(pipette_tpl, "left", left_name)
             left_p_file = td_path / f"{left_serial}.left.pipette.json"
             _write_json(left_p_file, _build_pipette_file(lp))
 
-            lt = _find_tip_template_for_pipette(tip_tpl, left_serial)
+            lt = _find_tip_templates_for_pipette(
+                tip_tpl,
+                left_serial,
+                preferred_tiprack=str(lp.get("tiprack", "")).strip(),
+                pipette_name=left_name,
+            )
             left_t_file = td_path / f"{left_serial}.tip_lengths.json"
             _write_json(left_t_file, _build_tip_length_file(lt))
 
         if right_serial:
-            rp = _find_template_by_mount(pipette_tpl, "right")
+            rp = _find_template_by_mount(pipette_tpl, "right", right_name)
             right_p_file = td_path / f"{right_serial}.right.pipette.json"
             _write_json(right_p_file, _build_pipette_file(rp))
 
-            rt = _find_tip_template_for_pipette(tip_tpl, right_serial)
+            rt = _find_tip_templates_for_pipette(
+                tip_tpl,
+                right_serial,
+                preferred_tiprack=str(rp.get("tiprack", "")).strip(),
+                pipette_name=right_name,
+            )
             right_t_file = td_path / f"{right_serial}.tip_lengths.json"
             _write_json(right_t_file, _build_tip_length_file(rt))
 
-        default_pipette_for_deck = right_serial or left_serial or ""
+        default_pipette_for_deck = left_serial or right_serial or ""
         deck_file = td_path / "deck_calibration.json"
         _write_json(deck_file, _build_deck_file(deck_tpl, default_pipette_for_deck))
         if not deck_file.is_file():

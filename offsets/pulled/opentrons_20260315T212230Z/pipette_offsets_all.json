@@ -1,0 +1,24 @@
+{
+  "data": [
+    {
+      "id": "P20SV202019102106&left",
+      "pipette": "P20SV202019102106",
+      "mount": "left",
+      "offset": [
+        -2.4000000000000075,
+        -2.700000000000001,
+        0.4000000000000199
+      ],
+      "tiprack": "60e107ba7e6e5d23beefe9f0c888f860f7b923c71906aaa5e7f460ab25c4f38a",
+      "tiprackUri": "opentrons/opentrons_96_tiprack_20ul/1",
+      "lastModified": "2026-03-15T21:21:43.400126Z",
+      "source": "user",
+      "status": {
+        "markedBad": false,
+        "source": null,
+        "markedAt": null
+      }
+    }
+  ],
+  "links": null
+}
