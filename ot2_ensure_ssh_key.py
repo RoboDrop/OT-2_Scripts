@@ -16,6 +16,7 @@ Notes:
 from __future__ import annotations
 
 import argparse
+import ipaddress
 import json
 import os
 import re
@@ -53,8 +54,31 @@ def _slug(value: str) -> str:
     return value or "ot2"
 
 
+def _strip_ipv6_brackets(host: str) -> str:
+    host = host.strip()
+    if host.startswith("[") and "]" in host:
+        return host[1 : host.index("]")]
+    return host
+
+
+def _is_ipv6_literal(host: str) -> bool:
+    try:
+        ipaddress.IPv6Address(_strip_ipv6_brackets(host).split("%", 1)[0])
+        return True
+    except Exception:
+        return False
+
+
+def _host_for_url(host: str) -> str:
+    return f"[{_strip_ipv6_brackets(host)}]" if _is_ipv6_literal(host) else host.strip()
+
+
+def _host_for_ssh(host: str) -> str:
+    return f"[{_strip_ipv6_brackets(host)}]" if _is_ipv6_literal(host) else host.strip()
+
+
 def _health(host: str, port: int, api_version: str, timeout_seconds: float) -> Dict[str, Any]:
-    url = f"http://{host}:{port}/health"
+    url = f"http://{_host_for_url(host)}:{port}/health"
     req = url_request.Request(url, headers={"opentrons-version": api_version})
     try:
         with url_request.urlopen(req, timeout=timeout_seconds) as resp:
@@ -136,7 +160,7 @@ def _ssh_base(host: str, user: str, port: int) -> list[str]:
         str(port),
         "-o",
         "StrictHostKeyChecking=accept-new",
-        f"{user}@{host}",
+        f"{user}@{_host_for_ssh(host)}",
     ]
 
 
@@ -153,7 +177,7 @@ def _install_pubkey_via_http(host: str, api_port: int, api_version: str, public_
     if not pub:
         raise RuntimeError(f"Public key is empty: {public_key}")
 
-    url = f"http://{host}:{api_port}/server/ssh_keys"
+    url = f"http://{_host_for_url(host)}:{api_port}/server/ssh_keys"
     body = json.dumps({"key": pub}).encode("utf-8")
     req = url_request.Request(
         url,

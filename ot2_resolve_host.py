@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import argparse
 import ipaddress
+import json
 import re
 import socket
 import subprocess
@@ -184,9 +185,105 @@ def _peer_ip_guesses(ip: str, prefixlen: int) -> List[str]:
     return _dedupe_keep_order(str(c) for c in candidates)
 
 
+def _strip_ipv6_brackets(host: str) -> str:
+    host = host.strip()
+    if host.startswith("[") and "]" in host:
+        return host[1 : host.index("]")]
+    return host
+
+
+def _is_ipv6_literal(host: str) -> bool:
+    raw = _strip_ipv6_brackets(host)
+    try:
+        ipaddress.IPv6Address(raw.split("%", 1)[0])
+        return True
+    except Exception:
+        return False
+
+
+def _host_for_url(host: str) -> str:
+    return f"[{_strip_ipv6_brackets(host)}]" if _is_ipv6_literal(host) else host.strip()
+
+
+def _windows_neighbor_candidates() -> List[str]:
+    """Return discovery candidates from Windows net adapter/neighbor tables."""
+    ps = r"""
+$ErrorActionPreference = 'Stop'
+$adapters = Get-NetAdapter |
+  Where-Object {
+    $_.Status -eq 'Up' -and
+    $_.HardwareInterface -eq $true -and
+    $_.InterfaceDescription -notmatch 'VMware|Hyper-V|VirtualBox|Bluetooth|Wi-Fi Direct'
+  } |
+  Select-Object InterfaceIndex,Name,InterfaceDescription
+
+$rows = foreach ($adapter in $adapters) {
+  $neighbors = Get-NetNeighbor -InterfaceIndex $adapter.InterfaceIndex -ErrorAction SilentlyContinue |
+    Where-Object {
+      $_.IPAddress -and
+      $_.LinkLayerAddress -and
+      $_.LinkLayerAddress -ne '00-00-00-00-00-00' -and
+      $_.LinkLayerAddress -ne 'FF-FF-FF-FF-FF-FF' -and
+      $_.IPAddress -notlike 'ff*'
+    } |
+    Select-Object IPAddress,LinkLayerAddress,State
+
+  [PSCustomObject]@{
+    InterfaceIndex = $adapter.InterfaceIndex
+    Name = $adapter.Name
+    InterfaceDescription = $adapter.InterfaceDescription
+    Neighbors = @($neighbors)
+  }
+}
+
+$rows | ConvertTo-Json -Compress -Depth 4
+"""
+    try:
+        out = _run_quiet(["powershell", "-NoProfile", "-Command", ps]).strip()
+    except Exception:
+        return []
+    if not out:
+        return []
+    try:
+        payload = json.loads(out)
+    except Exception:
+        return []
+
+    rows = payload if isinstance(payload, list) else [payload]
+    candidates: List[str] = []
+    for row in rows:
+        iface_index = row.get("InterfaceIndex")
+        neighbors = row.get("Neighbors") or []
+        if isinstance(neighbors, dict):
+            neighbors = [neighbors]
+        for neighbor in neighbors:
+            ip = str(neighbor.get("IPAddress") or "").strip()
+            if not ip:
+                continue
+            if _IPV4_RE.match(ip):
+                try:
+                    ip4 = ipaddress.IPv4Address(ip)
+                except Exception:
+                    continue
+                if ip4.is_private or ip4.is_link_local:
+                    candidates.append(ip)
+                continue
+            if ":" in ip and ip.lower().startswith("fe80:") and iface_index is not None:
+                candidates.append(f"{ip}%{iface_index}")
+    return _dedupe_keep_order(candidates)
+
+
 def _arp_candidates() -> List[str]:
     """Return discovery candidates from local neighbor/ARP table."""
     candidates: List[str] = []
+
+    # Windows
+    try:
+        candidates = _windows_neighbor_candidates()
+        if candidates:
+            return candidates
+    except Exception:
+        pass
 
     # macOS / BSD
     try:
@@ -290,7 +387,7 @@ def _arp_candidates() -> List[str]:
 
 
 def _probe_health(host: str, port: int, api_version: str, timeout_seconds: float) -> bool:
-    url = f"http://{host}:{port}/health"
+    url = f"http://{_host_for_url(host)}:{port}/health"
     req = url_request.Request(url, headers={"opentrons-version": api_version})
     try:
         with url_request.urlopen(req, timeout=timeout_seconds) as resp:

@@ -19,6 +19,7 @@ Output defaults to: ./offsets/pulled/<robot>_<timestamp>/
 from __future__ import annotations
 
 import argparse
+import ipaddress
 import json
 import os
 import re
@@ -55,8 +56,31 @@ def _run(cmd: List[str], *, check: bool = True) -> subprocess.CompletedProcess[s
     return proc
 
 
+def _strip_ipv6_brackets(host: str) -> str:
+    host = host.strip()
+    if host.startswith("[") and "]" in host:
+        return host[1 : host.index("]")]
+    return host
+
+
+def _is_ipv6_literal(host: str) -> bool:
+    try:
+        ipaddress.IPv6Address(_strip_ipv6_brackets(host).split("%", 1)[0])
+        return True
+    except Exception:
+        return False
+
+
+def _host_for_url(host: str) -> str:
+    return f"[{_strip_ipv6_brackets(host)}]" if _is_ipv6_literal(host) else host.strip()
+
+
+def _host_for_ssh(host: str) -> str:
+    return f"[{_strip_ipv6_brackets(host)}]" if _is_ipv6_literal(host) else host.strip()
+
+
 def _http_json(host: str, api_port: int, api_version: str, path: str, timeout: float = 10.0) -> Dict[str, Any]:
-    url = f"http://{host}:{api_port}{path}"
+    url = f"http://{_host_for_url(host)}:{api_port}{path}"
     req = url_request.Request(url, headers={"opentrons-version": str(api_version)})
     with url_request.urlopen(req, timeout=timeout) as resp:
         return json.loads(resp.read().decode("utf-8"))
@@ -100,7 +124,7 @@ def _ssh_base(host: str, user: str, port: int, ssh_key: str) -> List[str]:
     base = ["ssh", "-p", str(port), "-o", "StrictHostKeyChecking=accept-new"]
     if ssh_key:
         base += ["-i", ssh_key]
-    base += [f"{user}@{host}"]
+    base += [f"{user}@{_host_for_ssh(host)}"]
     return base
 
 
