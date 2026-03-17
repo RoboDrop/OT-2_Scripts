@@ -1,0 +1,290 @@
+{
+  "data": [
+    {
+      "id": "P3HMV212021062801&left",
+      "pipette": "P3HMV212021062801",
+      "mount": "left",
+      "offset": [
+        -3.599999999999996,
+        -3.4000000000000057,
+        -0.29999999999999183
+      ],
+      "tiprack": "ed323db6ca1ddf197aeb20667c1a7a91c89cfb2f931f45079d483928da056812",
+      "tiprackUri": "opentrons/opentrons_96_tiprack_300ul/1",
+      "lastModified": "2026-03-16T08:33:01.014220Z",
+      "source": "user",
+      "status": {
+        "markedBad": false,
+        "source": null,
+        "markedAt": null
+      }
+    },
+    {
+      "id": "P3HSV212021070504&left",
+      "pipette": "P3HSV212021070504",
+      "mount": "left",
+      "offset": [
+        -2.799999999999999,
+        -3.200000000000003,
+        0.5000000000000071
+      ],
+      "tiprack": "ed323db6ca1ddf197aeb20667c1a7a91c89cfb2f931f45079d483928da056812",
+      "tiprackUri": "opentrons/opentrons_96_tiprack_300ul/1",
+      "lastModified": "2026-03-15T23:18:30.007819Z",
+      "source": "user",
+      "status": {
+        "markedBad": false,
+        "source": null,
+        "markedAt": null
+      }
+    },
+    {
+      "id": "P3HSV202020062309&left",
+      "pipette": "P3HSV202020062309",
+      "mount": "left",
+      "offset": [
+        -2.799999999999999,
+        -3.200000000000003,
+        0.5000000000000071
+      ],
+      "tiprack": "ed323db6ca1ddf197aeb20667c1a7a91c89cfb2f931f45079d483928da056812",
+      "tiprackUri": "opentrons/opentrons_96_tiprack_300ul/1",
+      "lastModified": "2026-03-15T23:40:55.447401Z",
+      "source": "user",
+      "status": {
+        "markedBad": false,
+        "source": null,
+        "markedAt": null
+      }
+    },
+    {
+      "id": "P20SV212020050806&left",
+      "pipette": "P20SV212020050806",
+      "mount": "left",
+      "offset": [
+        -2.4000000000000075,
+        -2.700000000000001,
+        0.4000000000000199
+      ],
+      "tiprack": "60e107ba7e6e5d23beefe9f0c888f860f7b923c71906aaa5e7f460ab25c4f38a",
+      "tiprackUri": "opentrons/opentrons_96_tiprack_20ul/1",
+      "lastModified": "2026-03-15T22:14:25.448493Z",
+      "source": "user",
+      "status": {
+        "markedBad": false,
+        "source": null,
+        "markedAt": null
+      }
+    },
+    {
+      "id": "P3HSV212021052702&left",
+      "pipette": "P3HSV212021052702",
+      "mount": "left",
+      "offset": [
+        -2.799999999999999,
+        -3.200000000000003,
+        0.5000000000000071
+      ],
+      "tiprack": "ed323db6ca1ddf197aeb20667c1a7a91c89cfb2f931f45079d483928da056812",
+      "tiprackUri": "opentrons/opentrons_96_tiprack_300ul/1",
+      "lastModified": "2026-03-15T23:52:23.492881Z",
+      "source": "user",
+      "status": {
+        "markedBad": false,
+        "source": null,
+        "markedAt": null
+      }
+    },
+    {
+      "id": "P20SV202019072528&left",
+      "pipette": "P20SV202019072528",
+      "mount": "left",
+      "offset": [
+        -2.4000000000000075,
+        -2.700000000000001,
+        0.4000000000000199
+      ],
+      "tiprack": "60e107ba7e6e5d23beefe9f0c888f860f7b923c71906aaa5e7f460ab25c4f38a",
+      "tiprackUri": "opentrons/opentrons_96_tiprack_20ul/1",
+      "lastModified": "2026-03-15T22:27:52.151617Z",
+      "source": "user",
+      "status": {
+        "markedBad": false,
+        "source": null,
+        "markedAt": null
+      }
+    },
+    {
+      "id": "P20MV212021072110&left",
+      "pipette": "P20MV212021072110",
+      "mount": "left",
+      "offset": [
+        -2.599999999999996,
+        -3.8999999999999986,
+        0.0
+      ],
+      "tiprack": "60e107ba7e6e5d23beefe9f0c888f860f7b923c71906aaa5e7f460ab25c4f38a",
+      "tiprackUri": "opentrons/opentrons_96_tiprack_20ul/1",
+      "lastModified": "2026-03-16T09:49:06.289639Z",
+      "source": "user",
+      "status": {
+        "markedBad": false,
+        "source": null,
+        "markedAt": null
+      }
+    },
+    {
+      "id": "P3HSV212020061504&left",
+      "pipette": "P3HSV212020061504",
+      "mount": "left",
+      "offset": [
+        -2.799999999999999,
+        -3.200000000000003,
+        0.5000000000000071
+      ],
+      "tiprack": "ed323db6ca1ddf197aeb20667c1a7a91c89cfb2f931f45079d483928da056812",
+      "tiprackUri": "opentrons/opentrons_96_tiprack_300ul/1",
+      "lastModified": "2026-03-16T00:21:13.938619Z",
+      "source": "user",
+      "status": {
+        "markedBad": false,
+        "source": null,
+        "markedAt": null
+      }
+    },
+    {
+      "id": "P3HSV202020031203&left",
+      "pipette": "P3HSV202020031203",
+      "mount": "left",
+      "offset": [
+        -2.799999999999999,
+        -3.200000000000003,
+        0.5000000000000071
+      ],
+      "tiprack": "ed323db6ca1ddf197aeb20667c1a7a91c89cfb2f931f45079d483928da056812",
+      "tiprackUri": "opentrons/opentrons_96_tiprack_300ul/1",
+      "lastModified": "2026-03-16T00:12:10.188055Z",
+      "source": "user",
+      "status": {
+        "markedBad": false,
+        "source": null,
+        "markedAt": null
+      }
+    },
+    {
+      "id": "P3HMV202020041503&left",
+      "pipette": "P3HMV202020041503",
+      "mount": "left",
+      "offset": [
+        -4.4000000000000075,
+        -3.40000000000002,
+        0.09999999999999964
+      ],
+      "tiprack": "ed323db6ca1ddf197aeb20667c1a7a91c89cfb2f931f45079d483928da056812",
+      "tiprackUri": "opentrons/opentrons_96_tiprack_300ul/1",
+      "lastModified": "2026-03-16T07:35:48.338046Z",
+      "source": "user",
+      "status": {
+        "markedBad": false,
+        "source": null,
+        "markedAt": null
+      }
+    },
+    {
+      "id": "P20MV212021073011&left",
+      "pipette": "P20MV212021073011",
+      "mount": "left",
+      "offset": [
+        -2.300000000000006,
+        -4.799999999999997,
+        -0.40000000000000213
+      ],
+      "tiprack": "60e107ba7e6e5d23beefe9f0c888f860f7b923c71906aaa5e7f460ab25c4f38a",
+      "tiprackUri": "opentrons/opentrons_96_tiprack_20ul/1",
+      "lastModified": "2026-03-16T11:58:59.086097Z",
+      "source": "user",
+      "status": {
+        "markedBad": false,
+        "source": null,
+        "markedAt": null
+      }
+    },
+    {
+      "id": "P20SV202019072549&left",
+      "pipette": "P20SV202019072549",
+      "mount": "left",
+      "offset": [
+        -2.4000000000000075,
+        -2.700000000000001,
+        0.4000000000000199
+      ],
+      "tiprack": "60e107ba7e6e5d23beefe9f0c888f860f7b923c71906aaa5e7f460ab25c4f38a",
+      "tiprackUri": "opentrons/opentrons_96_tiprack_20ul/1",
+      "lastModified": "2026-03-15T22:05:40.150302Z",
+      "source": "user",
+      "status": {
+        "markedBad": false,
+        "source": null,
+        "markedAt": null
+      }
+    },
+    {
+      "id": "P20SV222021051014&left",
+      "pipette": "P20SV222021051014",
+      "mount": "left",
+      "offset": [
+        -2.4000000000000075,
+        -2.700000000000001,
+        0.4000000000000199
+      ],
+      "tiprack": "60e107ba7e6e5d23beefe9f0c888f860f7b923c71906aaa5e7f460ab25c4f38a",
+      "tiprackUri": "opentrons/opentrons_96_tiprack_20ul/1",
+      "lastModified": "2026-03-15T22:35:29.868810Z",
+      "source": "user",
+      "status": {
+        "markedBad": false,
+        "source": null,
+        "markedAt": null
+      }
+    },
+    {
+      "id": "P20SV202019102106&left",
+      "pipette": "P20SV202019102106",
+      "mount": "left",
+      "offset": [
+        -2.4000000000000075,
+        -2.700000000000001,
+        0.4000000000000199
+      ],
+      "tiprack": "60e107ba7e6e5d23beefe9f0c888f860f7b923c71906aaa5e7f460ab25c4f38a",
+      "tiprackUri": "opentrons/opentrons_96_tiprack_20ul/1",
+      "lastModified": "2026-03-15T21:30:48.942007Z",
+      "source": "user",
+      "status": {
+        "markedBad": false,
+        "source": null,
+        "markedAt": null
+      }
+    },
+    {
+      "id": "P3HSV212020122507&left",
+      "pipette": "P3HSV212020122507",
+      "mount": "left",
+      "offset": [
+        -2.799999999999999,
+        -3.200000000000003,
+        0.5000000000000071
+      ],
+      "tiprack": "ed323db6ca1ddf197aeb20667c1a7a91c89cfb2f931f45079d483928da056812",
+      "tiprackUri": "opentrons/opentrons_96_tiprack_300ul/1",
+      "lastModified": "2026-03-16T00:02:45.505950Z",
+      "source": "user",
+      "status": {
+        "markedBad": false,
+        "source": null,
+        "markedAt": null
+      }
+    }
+  ],
+  "links": null
+}

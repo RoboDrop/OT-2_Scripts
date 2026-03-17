@@ -1,0 +1,29 @@
+{
+  "scripts": {
+    "Ensure SSH Key": {
+      "host": "",
+      "api_port": "31950",
+      "api_version": "2",
+      "health_timeout": "2.0",
+      "ssh_user": "root",
+      "ssh_port": "22",
+      "key_dir": "",
+      "scope": "per-robot",
+      "ensure_authorized": true
+    },
+    "Export Pipette Swap Protocol": {
+      "mount": "left",
+      "output_dir": "C:\\Users\\neil\\Documents\\OT-2_Scripts\\build",
+      "filename": ""
+    },
+    "Resolve OT-2 Host": {
+      "host": "",
+      "port": "31950",
+      "api_version": "2",
+      "timeout": "2.0",
+      "pick_first": false
+    }
+  },
+  "selected_script": "Export Pipette Swap Protocol",
+  "python_path": "C:\\Users\\neil\\AppData\\Local\\Programs\\Opentrons\\resources\\python\\x64\\python.exe"
+}
