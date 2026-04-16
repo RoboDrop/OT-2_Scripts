@@ -57,6 +57,7 @@ _IPV4_RE = re.compile(r"^(\d+\.\d+\.\d+\.\d+)$")
 _MACOS_IFCONFIG_INET_RE = re.compile(
     r"^\s+inet\s+(?P<ip>\d+\.\d+\.\d+\.\d+)\s+netmask\s+(?P<netmask>0x[0-9a-fA-F]+|\d+\.\d+\.\d+\.\d+)"
 )
+_MDNS_OT2_NAME_RE = re.compile(r"^(OT2|OPENTRONS)", re.IGNORECASE)
 
 
 def _macos_ifconfig_blocks() -> Dict[str, str]:
@@ -289,6 +290,163 @@ def _arp_candidates() -> List[str]:
         return []
 
 
+def _format_url_host(address: str) -> str:
+    """Return a URL-ready host string for IPv4 or IPv6 addresses.
+
+    IPv4 passes through. Bare IPv6 is wrapped in brackets. IPv6 link-local
+    with a zone id (``%eth0``) has its ``%`` percent-encoded to ``%25`` for
+    RFC 6874 compliance.
+    """
+    raw = address.strip()
+    if not raw:
+        return raw
+    # Already bracketed or a hostname.
+    if raw.startswith("["):
+        return raw
+    # IPv4 dotted quad: pass through.
+    if _IPV4_RE.match(raw):
+        return raw
+    # Hostnames (no colon) pass through.
+    if ":" not in raw:
+        return raw
+    # Split off zone id for IPv6 link-local.
+    core, _, zone = raw.partition("%")
+    try:
+        ipaddress.IPv6Address(core)
+    except Exception:
+        # Unknown token; return as-is so downstream errors are clear.
+        return raw
+    if zone:
+        return f"[{core}%25{zone}]"
+    return f"[{core}]"
+
+
+def _run_dns_sd_with_timeout(args: Sequence[str], timeout_seconds: float) -> str:
+    """Run a ``dns-sd`` command that would otherwise run forever, capturing output.
+
+    macOS ``dns-sd`` does not exit on its own; kill it after ``timeout_seconds``
+    and return whatever it printed.
+    """
+    try:
+        proc = subprocess.run(
+            list(args),
+            capture_output=True,
+            text=True,
+            timeout=timeout_seconds,
+        )
+    except subprocess.TimeoutExpired as exc:
+        out = exc.stdout or ""
+        if isinstance(out, bytes):
+            out = out.decode("utf-8", errors="replace")
+        return out
+    except Exception:
+        return ""
+    return proc.stdout or ""
+
+
+def _mdns_browse_http(timeout_seconds: float) -> List[str]:
+    """Return mDNS ``_http._tcp`` instance names that look like OT-2 robots."""
+    out = _run_dns_sd_with_timeout(
+        ["dns-sd", "-B", "_http._tcp", "local."], timeout_seconds
+    )
+    names: List[str] = []
+    for line in out.splitlines():
+        tokens = line.split()
+        if len(tokens) < 6:
+            continue
+        # Typical line:
+        # "HH:MM:SS.mmm  Add        2  30 local.  _http._tcp.  OT2CEP20220228R03"
+        if "Add" not in tokens[:6]:
+            continue
+        name = tokens[-1]
+        if _MDNS_OT2_NAME_RE.match(name):
+            names.append(name)
+    return _dedupe_keep_order(names)
+
+
+def _mdns_resolve(hostname: str, timeout_seconds: float) -> List[str]:
+    """Resolve a ``.local`` hostname to URL-ready host strings via ``dns-sd``.
+
+    The input may be a bare instance name (``OT2XYZ``), a short local hostname
+    (``OT2XYZ.local``), or fully qualified (``OT2XYZ.local.``).
+    """
+    host = hostname.strip()
+    if not host:
+        return []
+    if not host.endswith("."):
+        if not host.endswith(".local"):
+            host = f"{host}.local"
+        host = f"{host}."
+    out = _run_dns_sd_with_timeout(
+        ["dns-sd", "-G", "v4v6", host], timeout_seconds
+    )
+    addrs: List[str] = []
+    for line in out.splitlines():
+        # Typical line:
+        # "HH:MM:SS.mmm  Add  2  30  OT2XYZ.local.  FE80:0000:...%en8  120"
+        # "HH:MM:SS.mmm  Add  2  30  OT2XYZ.local.  169.254.191.57  120"
+        # Negative answers (``No Such Record``) contain sentinel 0.0.0.0 / ::
+        # addresses and must be skipped.
+        if " Add " not in line:
+            continue
+        if "No Such Record" in line or "No Such Name" in line:
+            continue
+        for token in line.split():
+            if _IPV4_RE.match(token):
+                try:
+                    ipv4 = ipaddress.IPv4Address(token)
+                except Exception:
+                    continue
+                if ipv4.is_unspecified or ipv4.is_multicast:
+                    continue
+                addrs.append(token)
+                continue
+            core, _, zone = token.partition("%")
+            if ":" not in core:
+                continue
+            try:
+                ipv6 = ipaddress.IPv6Address(core)
+            except Exception:
+                continue
+            if ipv6.is_unspecified or ipv6.is_multicast:
+                continue
+            # Drop synthetic ``%<0>`` zone id that dns-sd emits for global addrs.
+            if zone and (zone.startswith("<") or not re.match(r"^[A-Za-z0-9_-]+$", zone)):
+                zone = ""
+            addrs.append(core if not zone else f"{core}%{zone}")
+    return _dedupe_keep_order(_format_url_host(a) for a in addrs)
+
+
+def _mdns_candidates(timeout_seconds: float) -> List[str]:
+    """Discover OT-2 candidate addresses via mDNS service browsing.
+
+    Returns URL-ready host strings (IPv4 bare, IPv6 bracketed with ``%25`` zone
+    encoding for link-local). Best-effort; returns ``[]`` on any failure.
+    """
+    # dns-sd is standard on macOS. On Linux, avahi-browse is the equivalent
+    # but uses a different CLI; skip silently if unavailable.
+    if sys.platform != "darwin":
+        return []
+    try:
+        names = _mdns_browse_http(timeout_seconds)
+    except Exception:
+        return []
+    if not names:
+        return []
+    out: List[str] = []
+    for name in names:
+        try:
+            out.extend(_mdns_resolve(name, timeout_seconds))
+        except Exception:
+            continue
+    # Also try the generic "opentrons.local" alias some robots publish.
+    try:
+        out.extend(_mdns_resolve("opentrons.local", timeout_seconds))
+    except Exception:
+        pass
+    return _dedupe_keep_order(out)
+
+
 def _probe_health(host: str, port: int, api_version: str, timeout_seconds: float) -> bool:
     url = f"http://{host}:{port}/health"
     req = url_request.Request(url, headers={"opentrons-version": api_version})
@@ -299,16 +457,26 @@ def _probe_health(host: str, port: int, api_version: str, timeout_seconds: float
         return False
 
 
-def _resolve(host_arg: str, port: int, api_version: str, timeout_seconds: float, pick_first: bool) -> str:
+def _resolve(
+    host_arg: str,
+    port: int,
+    api_version: str,
+    timeout_seconds: float,
+    pick_first: bool,
+    mdns_timeout_seconds: float = 3.0,
+) -> str:
     explicit = host_arg.strip()
     if explicit:
-        if _probe_health(explicit, port, api_version, timeout_seconds):
+        if _probe_health(_format_url_host(explicit), port, api_version, timeout_seconds):
             return explicit
         raise RuntimeError(f"Unable to reach OT-2 robot-server at {explicit}:{port} (/health).")
 
-    # Probe link-local / ARP-derived candidates first to avoid slow DNS timeouts on
-    # networks where opentrons.local is not resolvable.
-    candidates = _arp_candidates()
+    # Gather candidates from every cheap discovery source before probing. mDNS
+    # is last because ``dns-sd`` has to be killed at a wall-clock timeout.
+    candidates = _dedupe_keep_order([
+        *_arp_candidates(),
+        *_mdns_candidates(mdns_timeout_seconds),
+    ])
     reachable = [c for c in candidates if _probe_health(c, port, api_version, timeout_seconds)]
     if reachable:
         if len(reachable) > 1 and not pick_first:
@@ -335,6 +503,12 @@ def main() -> None:
     parser.add_argument("--api-version", default="2", help="opentrons-version header value (default: 2)")
     parser.add_argument("--timeout", type=float, default=2.0, help="probe timeout seconds (default: 2.0)")
     parser.add_argument(
+        "--mdns-timeout",
+        type=float,
+        default=3.0,
+        help="mDNS discovery timeout seconds (default: 3.0)",
+    )
+    parser.add_argument(
         "--pick-first",
         action="store_true",
         help="If multiple reachable hosts are found, choose the first instead of failing.",
@@ -348,6 +522,7 @@ def main() -> None:
             api_version=str(args.api_version),
             timeout_seconds=float(args.timeout),
             pick_first=bool(args.pick_first),
+            mdns_timeout_seconds=float(args.mdns_timeout),
         )
     except Exception as exc:
         _eprint(f"[ERROR] {exc}")
